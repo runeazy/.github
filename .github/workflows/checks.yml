@@ -1,0 +1,75 @@
+# Reusable: the golden path's repository checks (security, Markdown, commit messages).
+name: checks
+
+on:
+  workflow_call:
+    inputs:
+      gitleaks-config:
+        description: Path to the repository's gitleaks config, if it has one
+        type: string
+        default: .gitleaks.toml
+      markdown-globs:
+        description: Globs markdownlint-cli2 checks
+        type: string
+        default: '"**/*.md" "#**/node_modules" "#**/dist" "#CHANGELOG.md"'
+      dependency-review:
+        description: Run dependency review on PRs (needs the dependency graph)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets (gitleaks)
+        env:
+          CONFIG: ${{ inputs.gitleaks-config }}
+        run: |
+          args=(detect --source /repo --redact --verbose)
+          if [ -f "$CONFIG" ]; then args+=(--config "/repo/$CONFIG"); fi
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest "${args[@]}"
+      - name: Dependency review
+        if: github.event_name == 'pull_request' && inputs.dependency-review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Lint Markdown
+        env:
+          GLOBS: ${{ inputs.markdown-globs }}
+        run: eval "npx --yes markdownlint-cli2 $GLOBS"
+
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check commit messages (Conventional Commits)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          npm install --no-save --no-audit --no-fund @commitlint/cli @commitlint/config-conventional >/dev/null
+          if ls commitlint.config.* .commitlintrc* >/dev/null 2>&1; then
+            npx commitlint --from "$BASE" --to "$HEAD" --verbose
+          else
+            npx commitlint --extends @commitlint/config-conventional --from "$BASE" --to "$HEAD" --verbose
+          fi

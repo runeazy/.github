@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: runeazy/.github/.github/workflows/checks.yml@v1
+  dco:
+    if: github.event_name == 'pull_request'
+    uses: runeazy/.github/.github/workflows/dco.yml@v1
+  node:
+    uses: runeazy/.github/.github/workflows/node.yml@v1
+    permissions:
+      contents: read
+      packages: read
+    with:
+      node-version-file: .tool-versions

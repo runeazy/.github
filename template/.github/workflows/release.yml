@@ -1,0 +1,25 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.releases_created }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+  # release-please opens its PR with the runeazy-automation app token once that app exists, so CI
+  # runs on the release PR (a GITHUB_TOKEN-made PR starts no workflows).
+  # Add the publish or image job here, gated on needs.release-please.outputs.released == 'true'
+  # and holding packages: write only in that job.

@@ -1,0 +1,63 @@
+# Reusable: the golden path's Node jobs. Each runs the repository's npm script of the same name,
+# and is skipped when the repository has no such script.
+name: node
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Folder holding package.json
+        type: string
+        default: .
+      node-version-file:
+        description: File pinning Node (relative to working-directory)
+        type: string
+        default: .nvmrc
+      scripts:
+        description: npm scripts to run, in order
+        type: string
+        default: lint typecheck test build
+      read-packages:
+        description: Read @runeazy packages from GitHub Packages with the workflow token
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ${{ inputs.working-directory }}/${{ inputs.node-version-file }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+          registry-url: ${{ inputs.read-packages && 'https://npm.pkg.github.com' || '' }}
+          scope: ${{ inputs.read-packages && '@runeazy' || '' }}
+      - name: Refuse path links to other repositories
+        run: |
+          if grep -RIn --include=package.json -E '"@runeazy/[^"]+": *"(file|link):' . --exclude-dir=node_modules; then
+            echo "::error::@runeazy packages are taken by version, never by path"
+            exit 1
+          fi
+      - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run scripts
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+        run: |
+          for s in $SCRIPTS; do
+            if node -e "process.exit(require('./package.json').scripts?.['$s'] ? 0 : 1)"; then
+              echo "::group::npm run $s"; npm run "$s"; echo "::endgroup::"
+            else
+              echo "No '$s' script: skipped"
+            fi
+          done

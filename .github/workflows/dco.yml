@@ -1,0 +1,39 @@
+# Reusable: every commit in a pull request is signed off under the Developer Certificate of Origin.
+name: dco
+
+on:
+  workflow_call:
+    inputs:
+      exempt-authors:
+        description: Space-separated commit author emails that need no sign-off (bots)
+        type: string
+        default: "49699333+dependabot[bot]@users.noreply.github.com 29139614+renovate[bot]@users.noreply.github.com"
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check Signed-off-by
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          EXEMPT: ${{ inputs.exempt-authors }}
+        run: |
+          missing=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            email=$(git log -1 --format='%ae' "$sha")
+            case " $EXEMPT " in *" $email "*) continue ;; esac
+            name=$(git log -1 --format='%an' "$sha")
+            if ! git log -1 --format='%B' "$sha" | grep -qiF "Signed-off-by: $name <$email>"; then
+              echo "::error::$sha has no 'Signed-off-by: $name <$email>' line (commit with -s)"
+              missing=1
+            fi
+          done
+          exit $missing
