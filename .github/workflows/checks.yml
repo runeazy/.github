@@ -67,9 +67,14 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          npm install --no-save --no-audit --no-fund @commitlint/cli @commitlint/config-conventional >/dev/null
+          # commitlint goes in a folder of its own: installing at the root would install the
+          # repository's whole tree, which may need a registry token this job doesn't have.
+          tools="$RUNNER_TEMP/commitlint"
+          npm install --prefix "$tools" --no-audit --no-fund @commitlint/cli @commitlint/config-conventional >/dev/null
+          # A repository's own config extends @commitlint/config-conventional by name.
+          [ -e node_modules ] || ln -s "$tools/node_modules" node_modules
           if ls commitlint.config.* .commitlintrc* >/dev/null 2>&1; then
-            npx commitlint --from "$BASE" --to "$HEAD" --verbose
+            "$tools/node_modules/.bin/commitlint" --from "$BASE" --to "$HEAD" --verbose
           else
-            npx commitlint --extends @commitlint/config-conventional --from "$BASE" --to "$HEAD" --verbose
+            "$tools/node_modules/.bin/commitlint" --extends @commitlint/config-conventional --from "$BASE" --to "$HEAD" --verbose
           fi
