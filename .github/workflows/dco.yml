@@ -30,6 +30,8 @@ jobs:
           for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
             email=$(git log -1 --format='%ae' "$sha")
             case " $EXEMPT " in *" $email "*) continue ;; esac
+            # GitHub Apps (Dependabot, Renovate, runeazy-automation) commit as <id>+<app>[bot]@users.noreply.github.com.
+            case "$email" in *"[bot]@users.noreply.github.com") continue ;; esac
             name=$(git log -1 --format='%an' "$sha")
             if ! git log -1 --format='%B' "$sha" | grep -qiF "Signed-off-by: $name <$email>"; then
               echo "::error::$sha has no 'Signed-off-by: $name <$email>' line (commit with -s)"
